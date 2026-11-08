@@ -1,0 +1,18 @@
+name: Validate simplified alarm flow
+on:
+  push:
+    branches: [feature/simplified-flow]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test browser logic
+        run: node --test tests/flows.test.cjs
