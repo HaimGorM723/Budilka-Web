@@ -67,9 +67,8 @@ footer{margin:25px 0 0;text-align:center;color:#7f96aa;font-size:12px}
 <section id="ring" class="hide">
 <h1 class="center">Доброе утро!</h1><div class="center big">☀</div>
 <div class="stack card"><button class="primary" id="awake">Я проснулся</button><button id="snooze">Ещё 5 минут</button></div>
-<p id="ringNote" class="center" role="status"></p><dialog id="confirm"><p>Отключить будильник?</p><p id="confirmName"></p><div class="buttons"><button id="confirmYes" class="primary">Да</button><button id="confirmNo">Нет</button></div></dialog>
-<p class="caption center">Тест браузера. Вкладка должна оставаться открытой; с заблокированным экраном звонок не гарантируется.</p>
-</section>
+<p id="ringNote" class="center" role="status"></p></section><dialog id="confirm"><p>Отключить будильник?</p><p id="confirmName"></p><div class="buttons"><button id="confirmYes" class="primary">Да</button><button id="confirmNo">Нет</button></div></dialog>
+<p class="caption center hide">Тест браузера. Вкладка должна оставаться открытой; с заблокированным экраном звонок не гарантируется.</p>
 <footer>Будилка · браузерный прототип v0.5 · тест · не использовать как настоящий будильник</footer>
 </main>
 <script>
@@ -122,15 +121,15 @@ function beep(){tone(bellCount++%2?880:660,.55,.5)}
 function toggleLabel(){$("audioButton").textContent=audioOn?"Включены":"Выключены";$("audioButton").setAttribute("aria-pressed",String(audioOn))}
 $("audioButton").onclick=async()=>{audioOn=!audioOn;if(!audioOn)quiet();else await audio();toggleLabel()};
 function stop(id){const a=alarms[id];a.on=false;a.at=null;a.snooze=false;a.preview=false;if(ringing===id){quiet();ringing=null}paint()}
-function returnHome(){show("home");paint()}
-function open(id){show(id);if(id==="morning"){alarms.morning.preview=false;draw()}paint()}
+function returnHome(){quiet();show("home");paint()}
+function open(id){show(id);if(id==="morning"){alarms.morning.preview=false;draw();if(alarms.morning.on&&audioOn)audio()}paint()}
 function select(id){if(alarms[id].on){
  confirmTarget=id;$("confirmName").textContent=id==="morning"?"Рождение утра":"Просто будильник";$("confirm").showModal();
  }else open(id)}
 $("chooseMorning").onclick=()=>select("morning");
 $("chooseSimple").onclick=()=>select("simple");
 $("confirmNo").onclick=()=>{$("confirm").close();confirmTarget=null};
-$("confirmYes").onclick=()=>{const id=confirmTarget;$("confirm").close();confirmTarget=null;if(id){stop(id);quiet();returnHome()}};
+$("confirmYes").onclick=()=>{const id=confirmTarget;$("confirm").close();confirmTarget=null;if(id){stop(id);if(id==="morning")quiet();returnHome()}};
 for(const id of names){
  $("time"+suff(id)).value=clock(Date.now());
  $("start"+suff(id)).onclick=async()=>{
@@ -138,7 +137,7 @@ for(const id of names){
   if(!at)return;
   alarms[id].at=at;alarms[id].on=true;alarms[id].snooze=false;alarms[id].preview=false;
   if(id==="morning"){toggleLabel()}
-  await audio();paint();if(id==="morning")draw();
+  if(audioOn)await audio();paint();if(id==="morning")draw();
  };
  $("back"+suff(id)).onclick=returnHome;
  $(id==="morning"?"morningCancel":"simpleCancel").onclick=()=>{stop(id);quiet();returnHome()};
@@ -177,7 +176,7 @@ $("snooze").onclick=()=>{
  quiet();ringing=null;
  const a=alarms[id];a.on=true;a.snooze=true;a.preview=false;a.at=Date.now()+300000;
  $("time"+suff(id)).value=clock(a.at);
- if(id==="morning"){toggleLabel();audio();lastBird=0;lastMusic=0}
+ if(id==="morning"){toggleLabel();if(audioOn)audio();lastBird=0;lastMusic=0}
  open(id);
 };
 function tick(){
