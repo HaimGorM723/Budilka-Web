@@ -42,10 +42,10 @@ footer{margin:25px 0 0;text-align:center;color:#7f96aa;font-size:12px}
 <button id="chooseSimple">Просто будильник</button>
 <button id="openTester">Открыть тестовый ползунок</button>
 </div>
-<p id="selection" class="center"></p>
+<p id="selection" class="center" role="status" aria-live="polite"></p><button id="homeCancel" class="hide">Отменить установленный звонок</button>
 </section>
 <section id="morning" class="hide">
-<div class="row"><button class="link" data-home>← Назад</button><small>Рождение утра</small></div>
+<div class="row"><button class="link" data-home>← Назад</button><small id="morningMode">Рождение утра · тест</small></div>
 <h1 class="center" id="remaining">До звонка: 15 мин</h1>
 <div class="sky" id="sky"><div class="sun" id="sun"></div><div class="horizon"></div></div>
 <div class="timeline"><div class="stage on" id="dawn"><span>Рассвет</span><span id="dawnStatus">0%</span></div>
@@ -54,12 +54,12 @@ footer{margin:25px 0 0;text-align:center;color:#7f96aa;font-size:12px}
 </div>
 <div class="row"><span class="caption">−15 мин</span><span class="caption">Звонок</span></div>
 <input aria-label="Виртуальное время пробуждения" id="slider" type="range" min="0" max="900" step="1" value="0">
-<div class="buttons"><button id="toStart">В начало</button><button id="toEnd">К звонку</button></div>
+<div class="buttons"><button id="toStart">В начало</button><button id="toEnd">К звонку</button></div><p id="morningHint" class="caption">Это тестовая перемотка, она не устанавливает звонок.</p><button id="morningCancel" class="hide">Отменить утренний звонок</button>
 <div class="card"><div class="row"><span>Тестовые звуки</span><button id="audioButton" class="primary">Включить</button></div><p class="caption">Звук разрешается после нажатия. Птичьи трели и музыка синтезируются, реальные записи ещё не подключены.</p></div>
 </section>
 <section id="simple" class="hide">
 <div class="row"><button class="link" data-home>← Назад</button><small>Просто будильник</small></div>
-<h1>Просто будильник</h1><p>Время подъёма: <strong id="simpleWake">07:00</strong>. Это визуальный прототип. Реальные уведомления и звонки проверяем в Android-приложении.</p>
+<h1>Просто будильник</h1><p>Время подъёма: <strong id="simpleWake">07:00</strong>. Браузерный тест: после установки появится обратный отсчёт. Вкладку оставь открытой.</p>
 <div class="stack">
 <button id="simpleArm" class="primary">Установить будильник</button>
 <button id="simpleTest">Проверить звонок сейчас</button>
@@ -73,158 +73,203 @@ footer{margin:25px 0 0;text-align:center;color:#7f96aa;font-size:12px}
 <p id="ringNote" class="center" role="status"></p>
 <p class="caption center">Тест браузера. Вкладка должна оставаться открытой; с заблокированным экраном звонок не гарантируется.</p>
 </section>
-<footer>Будилка · браузерный прототип v0.3 · не использовать как настоящий будильник</footer>
+<footer>Будилка · браузерный прототип v0.4 · не использовать как настоящий будильник</footer>
 </main>
 <script>
 (()=>{
 "use strict";
 const $=id=>document.getElementById(id);
 const screens=["home","morning","simple","ring"];
-let virtualSeconds=0, audioEnabled=false, ctx=null, master=null, task=null;
-let lastChirpAt=-1,lastNoteAt=-1,wasRing=false;
-let alarmAt=null,ringInterval=null,beepIndex=0,alarmTimer=null;
+let alarmAt=null, alarmMode=null, snoozed=false, preview=false;
+let ctx=null, master=null, soundPreview=false, previewTimer=null, ringTimer=null;
+let virtualSeconds=0, lastChirp=0, lastNote=0, lastRingTone=0, lastMinute=-1;
 const saved=localStorage.getItem("budilkaWake");
 if(saved)$("wake").value=saved;
 $("wake").addEventListener("change",()=>localStorage.setItem("budilkaWake",$("wake").value));
-function show(name){if(name!=="morning" && audioEnabled)silence();screens.forEach(s=>$(s).classList.toggle("hide",s!==name));}
-document.querySelectorAll("[data-home]").forEach(b=>b.onclick=()=>show("home"));
-$("chooseMorning").onclick=()=>{show("morning");setPosition(0)};
-$("chooseSimple").onclick=()=>{$("simpleWake").textContent=$("wake").value;show("simple")};
-$("openTester").onclick=()=>{show("morning");setPosition(0)};
-// A browser demo timer: functional while this page remains running, not a system alarm.
-async function unlockAlarmAudio(){
- const C=window.AudioContext||window.webkitAudioContext;
- if(!C){$("simpleStatus").textContent="Браузер не поддерживает звук";return false}
- try{
-  if(!ctx || ctx.state==="closed") {ctx=new C();master=ctx.createGain();master.gain.value=.45;master.connect(ctx.destination)}
-  await ctx.resume();return ctx.state==="running";
- }catch(e){$("simpleStatus").textContent="Звук недоступен: "+e.message;return false}
+
+function show(name){
+ screens.forEach(s=>$(s).classList.toggle("hide",s!==name));
+ if(name!=="morning")stopPreviewAudio();
 }
-function stopRinging(){
- if(ringInterval!==null){clearInterval(ringInterval);ringInterval=null}
+function fmtClock(date){return date.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit",hour12:false})}
+function remainingLabel(ms){
+ const sec=Math.max(0,Math.ceil(ms/1000));
+ return Math.floor(sec/60)+" мин "+String(sec%60).padStart(2,"0")+" сек";
 }
-function setAlarm(when){
- stopRinging();
- alarmAt=when;
- refreshAlarmStatus();
+function selectedTime(){
+ const value=$("wake").value,match=/^([01]\d|2[0-3]):([0-5]\d)$/.exec(value);
+ if(!match)return null;
+ const date=new Date();
+ date.setHours(Number(match[1]),Number(match[2]),0,0);
+ if(date.getTime()<=Date.now())date.setDate(date.getDate()+1);
+ return date.getTime();
 }
-function refreshAlarmStatus(){
- if(!alarmAt) { $("simpleStatus").textContent="Звонок не установлен."; $("selection").textContent=""; return }
- const remaining=Math.max(0,Math.ceil((alarmAt-Date.now())/1000));
- const label="Звонок через "+Math.floor(remaining/60)+" мин "+String(remaining%60).padStart(2,"0")+" сек";
- $("simpleStatus").textContent=label;
- $("selection").textContent=label+" · для теста не закрывай вкладку";
+async function enableAudio(){
+ try {
+  const C=window.AudioContext||window.webkitAudioContext;
+  if(!C)throw new Error("Этот браузер не поддерживает звук");
+  if(!ctx||ctx.state==="closed"){
+   ctx=new C();master=ctx.createGain();master.gain.value=.48;master.connect(ctx.destination);
+  }
+  await ctx.resume();
+  return ctx.state==="running";
+ } catch(e){
+  $("selection").textContent="Звук не включён: "+e.message;
+  return false;
+ }
 }
-function alarmBeep(){
- // Repeated short original chime. Sound was unlocked when the user armed the timer.
- if(!ctx || ctx.state!=="running")return;
- tone(beepIndex++%2===0?660:880,.45,.23);
+function tone(hz,duration,gain){
+ if(!ctx||ctx.state!=="running"||!master)return;
+ const osc=ctx.createOscillator(),env=ctx.createGain(),t=ctx.currentTime;
+ osc.type="sine";osc.frequency.value=hz;osc.connect(env);env.connect(master);
+ env.gain.setValueAtTime(.0001,t);
+ env.gain.linearRampToValueAtTime(gain,t+.025);
+ env.gain.exponentialRampToValueAtTime(.0001,t+duration);
+ osc.start(t);osc.stop(t+duration+.03);
 }
+function chirp(){
+ if(!ctx||ctx.state!=="running")return;
+ [1170,1510,1340].forEach((hz,i)=>setTimeout(()=>tone(hz,.14,.085),i*170));
+}
+function stopRing(){if(ringTimer){clearInterval(ringTimer);ringTimer=null}}
+function stopPreviewAudio(){
+ soundPreview=false;$("audioButton").textContent="Включить";
+ if(previewTimer){clearInterval(previewTimer);previewTimer=null}
+}
+function updateStatuses(){
+ const wake=alarmAt?fmtClock(new Date(alarmAt)):"";
+ const info=alarmAt ? (snoozed?"Отложен до ":"Активен до ")+wake+" · осталось "+remainingLabel(alarmAt-Date.now()):"Звонок не установлен";
+ $("selection").textContent=alarmAt ? (alarmMode==="morning"?"Рождение утра: ":"Просто будильник: ")+info:"";
+ $("simpleStatus").textContent=info;
+ $("simpleWake").textContent=$("wake").value;
+ $("homeCancel").classList.toggle("hide",!alarmAt);
+ $("morningCancel").classList.toggle("hide",!(alarmAt&&alarmMode==="morning"&&!preview));
+}
+function cancelAlarm(){
+ alarmAt=null;alarmMode=null;snoozed=false;stopRing();
+ updateStatuses();
+}
+function arm(when,mode,isSnooze=false){
+ stopRing();
+ alarmAt=when;alarmMode=mode;snoozed=isSnooze;
+ $("wake").value=fmtClock(new Date(when));
+ localStorage.setItem("budilkaWake",$("wake").value);
+ preview=false;
+ updateStatuses();
+}
+async function choose(mode){
+ const when=selectedTime();
+ if(!when){$("selection").textContent="Выбери время подъёма";return}
+ const ready=await enableAudio();
+ if(!ready){$("selection").textContent="Нужно разрешить воспроизведение звука";return}
+ arm(when,mode);
+ if(mode==="simple")show("simple");
+ else {show("morning");$("morningMode").textContent="Рождение утра · установлено";syncMorning()}
+}
+$("chooseSimple").onclick=()=>choose("simple");
+$("chooseMorning").onclick=()=>choose("morning");
+$("simpleArm").onclick=()=>choose("simple");
+$("simpleCancel").onclick=()=>{cancelAlarm();$("simpleStatus").textContent="Звонок отменён"};
+$("homeCancel").onclick=cancelAlarm;
+$("morningCancel").onclick=()=>{cancelAlarm();show("home")};
+$("openTester").onclick=()=>{
+ preview=true;show("morning");$("morningMode").textContent="Рождение утра · тест";
+ $("morningHint").textContent="Перемещай ползунок: это только тест этапов.";
+ setPosition(0);
+};
+document.querySelectorAll("[data-home]").forEach(b=>b.onclick=()=>{show("home");updateStatuses()});
+function ringBeep(){tone(lastRingTone++%2?880:660,.5,.35)}
 function ringNow(){
- alarmAt=null;
- $("ringNote").textContent="Звонок в браузере (тест)";
+ const mode=alarmMode;
+ alarmAt=null;alarmMode=null;snoozed=false;preview=false;
+ stopPreviewAudio();stopRing();
  show("ring");
- beepIndex=0;
- alarmBeep();
- stopRinging();
- ringInterval=setInterval(alarmBeep,1200);
+ $("ringNote").textContent=mode==="morning"?"Рождение утра — звонок":"Просто будильник — звонок";
+ lastRingTone=0;
+ ringBeep();
+ ringTimer=setInterval(ringBeep,1350);
+ updateStatuses();
+ // Remember which scenario must be resumed after snooze.
+ alarmMode=mode;
 }
-$("simpleArm").onclick=async()=>{
- if(!await unlockAlarmAudio())return;
- const value=$("wake").value;
- if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)){ $("simpleStatus").textContent="Выбери время подъёма";return }
- const [hours,minutes]=value.split(":").map(Number);
- const now=new Date(),at=new Date(now);
- at.setHours(hours,minutes,0,0);
- if(at.getTime()<=Date.now())at.setDate(at.getDate()+1);
- setAlarm(at.getTime());
+$("simpleTest").onclick=async()=>{
+ if(!await enableAudio())return;
+ alarmMode="simple";ringNow();
 };
-$("simpleTest").onclick=async()=>{if(await unlockAlarmAudio())ringNow()};
-$("simpleCancel").onclick=()=>{setAlarm(null);stopRinging();};
-$("awake").onclick=()=>{stopRinging();setAlarm(null);$("selection").textContent="Будильник выключен";show("home")};
+$("awake").onclick=()=>{
+ cancelAlarm();show("home");
+ $("selection").textContent="Звонок отключён";
+};
 $("snooze").onclick=()=>{
- stopRinging();
- setAlarm(Date.now()+5*60*1000);
+ const mode=alarmMode||"simple";
+ arm(Date.now()+5*60*1000,mode,true);
+ $("ringNote").textContent="";
  show("home");
+ updateStatuses();
 };
-alarmTimer=setInterval(()=>{
- if(alarmAt && Date.now()>=alarmAt){ringNow();return}
- if(alarmAt)refreshAlarmStatus();
-},250);
-$("toStart").onclick=()=>setPosition(0);
-$("toEnd").onclick=()=>setPosition(900);
-$("slider").addEventListener("input",e=>setPosition(+e.target.value));
 function setPosition(value){
- virtualSeconds=Math.min(900,Math.max(0,value));
+ virtualSeconds=Math.max(0,Math.min(900,Math.round(value)));
  $("slider").value=virtualSeconds;
- const left=900-virtualSeconds,mins=Math.ceil(left/60);
- $("remaining").textContent=left?"До звонка: "+mins+" мин":"Пора вставать";
- const fraction=virtualSeconds/900;
+ const left=900-virtualSeconds,fraction=virtualSeconds/900;
+ $("remaining").textContent=left>0?"До звонка: "+Math.ceil(left/60)+" мин":"Пора вставать";
  const r=Math.round(18+205*fraction),g=Math.round(33+148*fraction),b=Math.round(69+88*fraction);
- $("sky").style.background="linear-gradient(#"+[r,g,b].map(n=>n.toString(16).padStart(2,"0")).join("")+",rgb("+Math.min(255,r+25)+","+Math.min(255,g+22)+","+Math.min(255,b+13)+"))";
+ $("sky").style.background="linear-gradient(rgb("+r+","+g+","+b+"),rgb("+Math.min(255,r+25)+","+Math.min(255,g+22)+","+Math.min(255,b+13)+"))";
  $("sun").style.transform="translateY("+(90-168*fraction)+"px)";
  $("sun").style.opacity=String(Math.min(1,.1+fraction*1.2));
  $("dawnStatus").textContent=Math.floor(fraction*100)+"%";
- const activeBirds=left<=300,activeMusic=left<=60,ring=left===0;
- $("birds").classList.toggle("on",activeBirds);$("music").classList.toggle("on",activeMusic);
- $("birdsStatus").textContent=activeBirds?"Активно":"−5 мин";
- $("musicStatus").textContent=activeMusic?"Активно":"−1 мин";
- $("dawn").classList.toggle("on",!ring);
- $("remaining").style.color=ring?"#a8e1b9":"#eef5fa";
- if(audioEnabled&&ring&&!wasRing)tone(659,1,.09);
- wasRing=ring;
+ $("birds").classList.toggle("on",left<=300);
+ $("music").classList.toggle("on",left<=60);
+ $("birdsStatus").textContent=left<=300?"Активно":"−5 мин";
+ $("musicStatus").textContent=left<=60?"Активно":"−1 мин";
 }
-function tone(hz,duration,gain,delay=0,kind="sine"){
- if(!ctx||!master)return;
- const osc=ctx.createOscillator(),env=ctx.createGain();
- osc.type=kind;osc.frequency.value=hz;
- osc.connect(env);env.connect(master);
- const t=ctx.currentTime+delay;
- env.gain.setValueAtTime(0,t);
- env.gain.linearRampToValueAtTime(gain,t+.035);
- env.gain.exponentialRampToValueAtTime(.0001,t+duration);
- osc.start(t);osc.stop(t+duration+.02);
+function syncMorning(){
+ if(preview||!alarmAt||alarmMode!=="morning")return;
+ const elapsed=900-Math.max(0,(alarmAt-Date.now())/1000);
+ setPosition(elapsed);
+ $("morningHint").textContent="Установлено на "+fmtClock(new Date(alarmAt))+". Вкладку держи открытой.";
 }
-function chirp(){
- if(!ctx)return;
- const now=ctx.currentTime;
- for(const [i,hz] of [[0,1180],[.18,1590],[.49,1360]]){
-  const o=ctx.createOscillator(),g=ctx.createGain(),t=now+i;
-  o.type="sine";o.frequency.setValueAtTime(hz,t);o.frequency.exponentialRampToValueAtTime(hz*1.38,t+.15);
-  o.connect(g);g.connect(master);
-  g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(.045,t+.045);g.gain.exponentialRampToValueAtTime(.0001,t+.17);
-  o.start(t);o.stop(t+.19);
- }
-}
+$("slider").addEventListener("input",e=>{
+ if(!preview){preview=true;$("morningMode").textContent="Рождение утра · тест";$("morningHint").textContent="Ручная перемотка. Настоящее расписание не меняется."; }
+ setPosition(Number(e.target.value));
+});
+$("toStart").onclick=()=>{preview=true;setPosition(0)};
+$("toEnd").onclick=()=>{preview=true;setPosition(900)};
 function soundTick(){
- if(!audioEnabled||!ctx||document.hidden)return;
- const left=900-virtualSeconds,now=Date.now();
- if(left<=300&&left>0&&now-lastChirpAt>1550){chirp();lastChirpAt=now}
- if(left<=60&&left>0&&now-lastNoteAt>1150){
-  const notes=[261.63,329.63,392,440],ix=Math.floor(now/1150)%notes.length;
-  tone(notes[ix],.85,.07);lastNoteAt=now;
+ if(!ctx||ctx.state!=="running"||document.hidden)return;
+ let left=900-virtualSeconds;
+ const now=Date.now();
+ if(left<=300&&left>0&&now-lastChirp>2000){chirp();lastChirp=now}
+ if(left<=60&&left>0&&now-lastNote>1400){
+  const notes=[261.63,329.63,392,440],idx=Math.floor(now/1400)%4;
+  tone(notes[idx],.8,.085);lastNote=now;
  }
-}
-function silence(){
- audioEnabled=false;
- $("audioButton").textContent="Включить";
- if(task){clearInterval(task);task=null}
- if(ctx && !alarmAt && !ringInterval){ctx.close().catch(()=>{});ctx=null;master=null}
 }
 $("audioButton").onclick=async()=>{
- if(audioEnabled){silence();return}
- try{
-  const C=window.AudioContext||window.webkitAudioContext;
-  if(!C){alert("Этот браузер не поддерживает Web Audio");return}
-  ctx=new C();await ctx.resume();master=ctx.createGain();master.gain.value=.45;master.connect(ctx.destination);
-  audioEnabled=true;lastChirpAt=-1;lastNoteAt=-1;
-  $("audioButton").textContent="Выключить";
-  soundTick();task=setInterval(soundTick,250);
- }catch(e){silence();alert("Не удалось включить звук: "+e.message)}
+ if(soundPreview){stopPreviewAudio();return}
+ if(!await enableAudio())return;
+ soundPreview=true;$("audioButton").textContent="Выключить";
+ lastChirp=0;lastNote=0;
+ soundTick();previewTimer=setInterval(soundTick,300);
 };
-document.addEventListener("visibilitychange",()=>{if(document.hidden)silence()});
-window.addEventListener("pagehide",silence);
-setPosition(0);
+setInterval(()=>{
+ if(alarmAt){
+  if(Date.now()>=alarmAt){ringNow();return}
+  if(alarmMode==="morning"&&!snoozed){
+   const left=(alarmAt-Date.now())/1000;
+   if(left<=300&&left>0&&Date.now()-lastChirp>2000&&ctx?.state==="running"){chirp();lastChirp=Date.now()}
+   if(left<=60&&left>0&&Date.now()-lastNote>1400&&ctx?.state==="running"){
+    tone([261.63,329.63,392,440][Math.floor(Date.now()/1400)%4],.8,.08);lastNote=Date.now();
+   }
+   syncMorning();
+  }
+  updateStatuses();
+ }
+},400);
+document.addEventListener("visibilitychange",()=>{
+ if(document.hidden)stopPreviewAudio();
+});
+window.addEventListener("pagehide",()=>{stopRing();stopPreviewAudio()});
+updateStatuses();setPosition(0);
 })();
 </script>
 </body></html>
