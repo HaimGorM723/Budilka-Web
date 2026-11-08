@@ -13,7 +13,7 @@ button{font:inherit;cursor:pointer;border:1px solid var(--line);background:#2035
 button.primary{background:var(--sage);color:#102a26;border:0;font-weight:700}
 button:focus-visible,input:focus-visible{outline:3px solid var(--sage);outline-offset:3px}
 button.link{border:0;background:none;color:var(--sage);min-height:36px;padding:4px 6px}
-button.selected{border-color:var(--sage);color:var(--sage)}button:disabled{opacity:.35;cursor:not-allowed;filter:grayscale(1)}
+button.selected{border-color:var(--sage);color:var(--sage)}
 .buttons{display:grid;grid-template-columns:1fr 1fr;gap:11px}.stack{display:grid;gap:12px}
 .card{background:var(--card);border:1px solid #2b4354;border-radius:23px;padding:20px;margin:15px 0}
 h1{font-size:25px;font-weight:650;margin:16px 0 8px}h2{font-size:18px;font-weight:650;margin:4px 0 12px}
@@ -35,10 +35,10 @@ footer{margin:25px 0 0;text-align:center;color:#7f96aa;font-size:12px}
 <header><strong>Будилка</strong><small>WEB · тест</small></header>
 <section id="home">
 <h1 class="center">Текущее время</h1><div id="clockNow" class="big center">--:--</div>
-<p class="center">Выбери сценарий. Подсвеченные будильники запущены.</p>
+<p class="center">Светлая кнопка — сценарий запущен.</p>
 <div class="stack">
-<button class="primary" id="chooseMorning" disabled>Рождение утра</button>
-<button id="chooseSimple" disabled>Просто будильник</button>
+<button id="chooseMorning">Рождение утра</button>
+<button id="chooseSimple">Просто будильник</button>
 
 </div>
 </section>
@@ -68,8 +68,8 @@ footer{margin:25px 0 0;text-align:center;color:#7f96aa;font-size:12px}
 <h1 class="center">Доброе утро!</h1><div class="center big">☀</div>
 <div class="stack card"><button class="primary" id="awake">Я проснулся</button><button id="snooze">Ещё 5 минут</button></div>
 <p id="ringNote" class="center" role="status"></p></section><dialog id="confirm"><p>Отключить будильник?</p><p id="confirmName"></p><div class="buttons"><button id="confirmYes" class="primary">Да</button><button id="confirmNo">Нет</button></div></dialog>
-<p class="caption center hide">Тест браузера. Вкладка должна оставаться открытой; с заблокированным экраном звонок не гарантируется.</p>
-<footer>Будилка · браузерный прототип v0.5 · тест · не использовать как настоящий будильник</footer>
+<p class="caption center">Тест в открытом браузере. При блокировке экрана звонок не гарантируется.</p>
+<footer>Будилка · браузерный прототип v0.5.1 · тест · не использовать как настоящий будильник</footer>
 </main>
 <script>
 (()=>{
@@ -91,6 +91,7 @@ function paint(){
  for(const id of names){
   const a=alarms[id],b=$(id==="morning"?"chooseMorning":"chooseSimple");
   b.classList.toggle("chosen",a.on);
+  b.setAttribute("aria-pressed",String(a.on));
   const status=a.on?"Звонок в "+clock(a.at)+" · осталось "+left(a.at-Date.now()):"Не запущен";
   $(id==="morning"?"statusMorning":"simpleStatus").textContent=status;
  }
@@ -129,18 +130,19 @@ function select(id){if(alarms[id].on){
 $("chooseMorning").onclick=()=>select("morning");
 $("chooseSimple").onclick=()=>select("simple");
 $("confirmNo").onclick=()=>{$("confirm").close();confirmTarget=null};
-$("confirmYes").onclick=()=>{const id=confirmTarget;$("confirm").close();confirmTarget=null;if(id){stop(id);if(id==="morning")quiet();returnHome()}};
+$("confirm").addEventListener("close",()=>{confirmTarget=null});
+$("confirmYes").onclick=()=>{const id=confirmTarget;$("confirm").close();confirmTarget=null;if(id){stop(id);returnHome()}};
 for(const id of names){
  $("time"+suff(id)).value=clock(Date.now());
  $("start"+suff(id)).onclick=async()=>{
   const at=pick(id);$("error"+suff(id)).textContent=at?"":"Установите время позже текущего";
   if(!at)return;
   alarms[id].at=at;alarms[id].on=true;alarms[id].snooze=false;alarms[id].preview=false;
-  if(id==="morning"){toggleLabel()}
+  if(id==="morning"){audioOn=true;toggleLabel();lastBird=0;lastMusic=0}
   if(audioOn)await audio();paint();if(id==="morning")draw();
  };
  $("back"+suff(id)).onclick=returnHome;
- $(id==="morning"?"morningCancel":"simpleCancel").onclick=()=>{stop(id);quiet();returnHome()};
+ $(id==="morning"?"morningCancel":"simpleCancel").onclick=()=>{stop(id);returnHome()};
 }
 function drawAt(position){
  const p=Math.max(0,Math.min(1,position/900)),elapsed=p*900,to=900-elapsed;
@@ -189,7 +191,7 @@ function tick(){
  if(page==="morning"){
   const a=alarms.morning;if(!a.preview)draw();
   const seconds=a.preview?900-Number($("slider").value):a.on?(a.at-Date.now())/1000:900,now=Date.now();
-  if(audioOn&&ctx?.state==="running"&&!ringing){
+  if(audioOn&&ctx?.state==="running"&&!ringing&&!document.hidden){
    if(seconds>0&&((a.snooze&&a.on)||seconds<=180)&&now-lastBird>1850){bird();lastBird=now}
    if(seconds>0&&seconds<=60&&now-lastMusic>1500){music();lastMusic=now}
   }
