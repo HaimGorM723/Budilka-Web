@@ -86,7 +86,7 @@ let alarmAt=null,ringInterval=null,beepIndex=0,alarmTimer=null;
 const saved=localStorage.getItem("budilkaWake");
 if(saved)$("wake").value=saved;
 $("wake").addEventListener("change",()=>localStorage.setItem("budilkaWake",$("wake").value));
-function show(name){if(name!=="morning")silence();screens.forEach(s=>$(s).classList.toggle("hide",s!==name));}
+function show(name){if(name!=="morning" && audioEnabled)silence();screens.forEach(s=>$(s).classList.toggle("hide",s!==name));}
 document.querySelectorAll("[data-home]").forEach(b=>b.onclick=()=>show("home"));
 $("chooseMorning").onclick=()=>{show("morning");setPosition(0)};
 $("chooseSimple").onclick=()=>{$("simpleWake").textContent=$("wake").value;show("simple")};
@@ -132,7 +132,7 @@ function ringNow(){
 $("simpleArm").onclick=async()=>{
  if(!await unlockAlarmAudio())return;
  const value=$("wake").value;
- if(!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(value)){ $("simpleStatus").textContent="Выбери время подъёма";return }
+ if(!/^([01]\d|2[0-3]):[0-5]\\d$/.test(value)){ $("simpleStatus").textContent="Выбери время подъёма";return }
  const [hours,minutes]=value.split(":").map(Number);
  const now=new Date(),at=new Date(now);
  at.setHours(hours,minutes,0,0);
