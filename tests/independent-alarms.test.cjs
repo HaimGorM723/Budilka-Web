@@ -8,7 +8,7 @@ function app(){
  const names=[...html.matchAll(/id="([^"]+)"/g)].map(m=>m[1]);
  assert.equal(new Set(names).size,names.length);
  let now=new Date(2026,10,8,6,50).getTime(),gain=0,sounds=0,stops=0;
- const els=Object.fromEntries(names.map(id=>[id,{value:"",textContent:"",style:{},attrs:{},listeners:{},
+ const els=Object.fromEntries(names.map(id=>[id,{value:"",textContent:"",disabled:false,style:{},attrs:{},listeners:{},
   addEventListener(k,f){this.listeners[k]=f},setAttribute(k,v){this.attrs[k]=v},
   classList:{values:new Set(["hide"]),toggle(k,v){(v===undefined?!this.values.has(k):v)?this.values.add(k):this.values.delete(k)},contains(k){return this.values.has(k)}}
  }]));
@@ -95,4 +95,47 @@ test("user can choose time only in the relevant scenario",()=>{
  assert.ok(a.els.timeMorning);
  assert.ok(a.els.timeSimple);
  assert.equal(a.els.wake,undefined);
+});
+
+test("menu: both scenario buttons are always enabled and dark until START",async()=>{
+ const a=app();
+ assert.equal(a.els.chooseMorning.disabled,false);
+ assert.equal(a.els.chooseSimple.disabled,false);
+ assert.equal(a.els.chooseMorning.classList.contains("chosen"),false);
+ assert.equal(a.els.chooseSimple.classList.contains("chosen"),false);
+ a.els.chooseMorning.onclick();
+ assert.ok(a.visible("morning"));
+ assert.equal(a.els.chooseMorning.classList.contains("chosen"),false);
+ a.els.timeMorning.value="07:00";
+ await a.els.startMorning.onclick();
+ assert.equal(a.els.chooseMorning.classList.contains("chosen"),true);
+ a.els.backMorning.onclick();
+ assert.equal(a.els.chooseMorning.classList.contains("chosen"),true);
+});
+test("invalid or past wake time never arms the alarm",async()=>{
+ const a=app();
+ a.els.chooseSimple.onclick();
+ a.els.timeSimple.value="06:45";
+ await a.els.startSimple.onclick();
+ assert.equal(a.els.chooseSimple.classList.contains("chosen"),false);
+ assert.match(a.els.errorSimple.textContent,/позже/);
+ a.els.timeSimple.value="07:00";
+ await a.els.startSimple.onclick();
+ assert.equal(a.els.chooseSimple.classList.contains("chosen"),true);
+});
+test("snoozed morning keeps two independently scheduled alarms",async()=>{
+ const a=app();
+ a.els.chooseMorning.onclick();
+ a.els.timeMorning.value="07:00";await a.els.startMorning.onclick();
+ a.els.backMorning.onclick();
+ a.els.chooseSimple.onclick();a.els.timeSimple.value="07:08";await a.els.startSimple.onclick();
+ a.els.backSimple.onclick();
+ a.advance(10*60_000);await a.flush();
+ assert.ok(a.visible("ring"));
+ a.els.snooze.onclick();await a.flush();
+ assert.ok(a.els.chooseMorning.classList.contains("chosen"));
+ assert.ok(a.els.chooseSimple.classList.contains("chosen"));
+ let n=a.sounds;
+ a.advance(2_000);
+ assert.ok(a.sounds>n,"Birds sound after snooze");
 });
