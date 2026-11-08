@@ -60,14 +60,20 @@ footer{margin:25px 0 0;text-align:center;color:#7f96aa;font-size:12px}
 <section id="simple" class="hide">
 <div class="row"><button class="link" data-home>← Назад</button><small>Просто будильник</small></div>
 <h1>Просто будильник</h1><p>Время подъёма: <strong id="simpleWake">07:00</strong>. Это визуальный прототип. Реальные уведомления и звонки проверяем в Android-приложении.</p>
-<button id="simpleTest" class="primary">Проверить экран звонка</button>
+<div class="stack">
+<button id="simpleArm" class="primary">Установить будильник</button>
+<button id="simpleTest">Проверить звонок сейчас</button>
+<button id="simpleCancel">Отменить будильник</button>
+</div>
+<p id="simpleStatus" role="status" aria-live="polite">Звонок пока не установлен.</p>
 </section>
 <section id="ring" class="hide">
 <h1 class="center">Доброе утро!</h1><div class="center big">☀</div>
 <div class="stack card"><button class="primary" id="awake">Я проснулся</button><button id="snooze">Ещё 5 минут</button></div>
-<p id="ringNote" class="center"></p>
+<p id="ringNote" class="center" role="status"></p>
+<p class="caption center">Тест браузера. Вкладка должна оставаться открытой; с заблокированным экраном звонок не гарантируется.</p>
 </section>
-<footer>Будилка · браузерный прототип v0.2 · не использовать как настоящий будильник</footer>
+<footer>Будилка · браузерный прототип v0.3 · не использовать как настоящий будильник</footer>
 </main>
 <script>
 (()=>{
@@ -76,6 +82,7 @@ const $=id=>document.getElementById(id);
 const screens=["home","morning","simple","ring"];
 let virtualSeconds=0, audioEnabled=false, ctx=null, master=null, task=null;
 let lastChirpAt=-1,lastNoteAt=-1,wasRing=false;
+let alarmAt=null,ringInterval=null,beepIndex=0,alarmTimer=null;
 const saved=localStorage.getItem("budilkaWake");
 if(saved)$("wake").value=saved;
 $("wake").addEventListener("change",()=>localStorage.setItem("budilkaWake",$("wake").value));
@@ -84,9 +91,66 @@ document.querySelectorAll("[data-home]").forEach(b=>b.onclick=()=>show("home"));
 $("chooseMorning").onclick=()=>{show("morning");setPosition(0)};
 $("chooseSimple").onclick=()=>{$("simpleWake").textContent=$("wake").value;show("simple")};
 $("openTester").onclick=()=>{show("morning");setPosition(0)};
-$("simpleTest").onclick=()=>show("ring");
-$("awake").onclick=()=>{$("selection").textContent="Тестовый сигнал завершён.";show("home")};
-$("snooze").onclick=()=>{$("selection").textContent="Повтор через 5 минут — демонстрация интерфейса.";show("home")};
+// A browser demo timer: functional while this page remains running, not a system alarm.
+async function unlockAlarmAudio(){
+ const C=window.AudioContext||window.webkitAudioContext;
+ if(!C){$("simpleStatus").textContent="Браузер не поддерживает звук";return false}
+ try{
+  if(!ctx || ctx.state==="closed") {ctx=new C();master=ctx.createGain();master.gain.value=.45;master.connect(ctx.destination)}
+  await ctx.resume();return ctx.state==="running";
+ }catch(e){$("simpleStatus").textContent="Звук недоступен: "+e.message;return false}
+}
+function stopRinging(){
+ if(ringInterval!==null){clearInterval(ringInterval);ringInterval=null}
+}
+function setAlarm(when){
+ stopRinging();
+ alarmAt=when;
+ refreshAlarmStatus();
+}
+function refreshAlarmStatus(){
+ if(!alarmAt) { $("simpleStatus").textContent="Звонок не установлен."; $("selection").textContent=""; return }
+ const remaining=Math.max(0,Math.ceil((alarmAt-Date.now())/1000));
+ const label="Звонок через "+Math.floor(remaining/60)+" мин "+String(remaining%60).padStart(2,"0")+" сек";
+ $("simpleStatus").textContent=label;
+ $("selection").textContent=label+" · для теста не закрывай вкладку";
+}
+function alarmBeep(){
+ // Repeated short original chime. Sound was unlocked when the user armed the timer.
+ if(!ctx || ctx.state!=="running")return;
+ tone(beepIndex++%2===0?660:880,.45,.23);
+}
+function ringNow(){
+ alarmAt=null;
+ $("ringNote").textContent="Звонок в браузере (тест)";
+ show("ring");
+ beepIndex=0;
+ alarmBeep();
+ stopRinging();
+ ringInterval=setInterval(alarmBeep,1200);
+}
+$("simpleArm").onclick=async()=>{
+ if(!await unlockAlarmAudio())return;
+ const value=$("wake").value;
+ if(!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(value)){ $("simpleStatus").textContent="Выбери время подъёма";return }
+ const [hours,minutes]=value.split(":").map(Number);
+ const now=new Date(),at=new Date(now);
+ at.setHours(hours,minutes,0,0);
+ if(at.getTime()<=Date.now())at.setDate(at.getDate()+1);
+ setAlarm(at.getTime());
+};
+$("simpleTest").onclick=async()=>{if(await unlockAlarmAudio())ringNow()};
+$("simpleCancel").onclick=()=>{setAlarm(null);stopRinging();};
+$("awake").onclick=()=>{stopRinging();setAlarm(null);$("selection").textContent="Будильник выключен";show("home")};
+$("snooze").onclick=()=>{
+ stopRinging();
+ setAlarm(Date.now()+5*60*1000);
+ show("home");
+};
+alarmTimer=setInterval(()=>{
+ if(alarmAt && Date.now()>=alarmAt){ringNow();return}
+ if(alarmAt)refreshAlarmStatus();
+},250);
 $("toStart").onclick=()=>setPosition(0);
 $("toEnd").onclick=()=>setPosition(900);
 $("slider").addEventListener("input",e=>setPosition(+e.target.value));
@@ -145,7 +209,7 @@ function silence(){
  audioEnabled=false;
  $("audioButton").textContent="Включить";
  if(task){clearInterval(task);task=null}
- if(ctx){ctx.close().catch(()=>{});ctx=null;master=null}
+ if(ctx && !alarmAt && !ringInterval){ctx.close().catch(()=>{});ctx=null;master=null}
 }
 $("audioButton").onclick=async()=>{
  if(audioEnabled){silence();return}
