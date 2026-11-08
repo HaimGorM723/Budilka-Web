@@ -123,7 +123,13 @@ function toggleLabel(){$("audioButton").textContent=audioOn?"Включены":"
 $("audioButton").onclick=async()=>{audioOn=!audioOn;if(!audioOn)quiet();else await audio();toggleLabel()};
 function stop(id){const a=alarms[id];a.on=false;a.at=null;a.snooze=false;a.preview=false;if(ringing===id){quiet();ringing=null}paint()}
 function returnHome(){quiet();show("home");paint()}
-function open(id){show(id);if(id==="morning"){alarms.morning.preview=false;draw();if(audioOn)audio()}paint()}
+function open(id){
+ if(!alarms[id].on){$("time"+suff(id)).value=clock(Date.now());$("error"+suff(id)).textContent="";}
+ if(id==="morning" && !alarms.morning.on){audioOn=true;toggleLabel();}
+ show(id);
+ if(id==="morning"){alarms.morning.preview=false;draw();if(audioOn)audio()}
+ paint();
+}
 function select(id){if(alarms[id].on){
  confirmTarget=id;$("confirmName").textContent=id==="morning"?"Рождение утра":"Просто будильник";$("confirm").showModal();
  }else open(id)}
