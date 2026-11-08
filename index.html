@@ -52,12 +52,12 @@ footer{margin:25px 0 0;text-align:center;color:#7f96aa;font-size:12px}
 </div>
 <div class="row"><span class="caption">−15 мин</span><span class="caption">Звонок</span></div>
 <input aria-label="Виртуальное время пробуждения" id="slider" type="range" min="0" max="900" step="1" value="0">
-<p id="morningHint" class="caption">Это тестовая перемотка, она не устанавливает звонок.</p><button id="morningCancel">Отменить будильник</button>
-<div class="card"><div class="row"><span>Звуки</span><button id="audioButton" class="primary" aria-pressed="true">Включены</button></div><p class="caption">В тесте используются синтезированные трели и музыка.</p></div>
+<p id="morningHint" class="caption">Это тестовая перемотка, она не устанавливает звонок.</p>
+<div class="card"><div class="row"><span>Звуки</span><button id="audioButton" class="primary" aria-pressed="true">Включены</button></div><p class="caption">В тесте используются синтезированные трели и музыка.</p></div><div class="row"><button id="backMorning" class="pill">← Назад</button><button id="morningCancel" class="pill">Отменить будильник</button></div>
 </section>
 <section id="simple" class="hide">
 
-<h1>Просто будильник</h1><p>Время звонка: <strong id="simpleWake">—</strong></p>
+<h1>Просто будильник</h1><label for="timeSimple">Время пробуждения</label><input type="time" class="time" id="timeSimple"><p id="errorSimple" class="caption"></p><button id="startSimple" class="primary">Старт</button>
 <div class="stack">
 <button id="simpleTest">Проверить звонок сейчас</button>
 <div class="row"><button id="backSimple" class="pill">← Назад</button><button id="simpleCancel" class="pill">Отменить будильник</button></div>
@@ -137,7 +137,7 @@ for(const id of names){
   const at=pick(id);$("error"+suff(id)).textContent=at?"":"Установите время позже текущего";
   if(!at)return;
   alarms[id].at=at;alarms[id].on=true;alarms[id].snooze=false;alarms[id].preview=false;
-  if(id==="morning"){audioOn=true;toggleLabel()}
+  if(id==="morning"){toggleLabel()}
   await audio();paint();if(id==="morning")draw();
  };
  $("back"+suff(id)).onclick=returnHome;
@@ -165,7 +165,7 @@ $("slider").addEventListener("input",e=>{alarms.morning.preview=true;drawAt(+e.t
 function alarmRing(id){
  if(!alarms[id].on)return;
  alarms[id].on=false;alarms[id].at=null;
- ringing=id;quiet();audioOn=true;toggleLabel();
+ ringing=id;quiet();toggleLabel();
  show("ring");$("ringNote").textContent=id==="morning"?"Рождение утра":"Просто будильник";
  audio().then(ok=>{if(ok&&ringing===id){bellCount=0;beep();ringTimer=setInterval(beep,1250)}});
  paint();
@@ -177,7 +177,7 @@ $("snooze").onclick=()=>{
  quiet();ringing=null;
  const a=alarms[id];a.on=true;a.snooze=true;a.preview=false;a.at=Date.now()+300000;
  $("time"+suff(id)).value=clock(a.at);
- if(id==="morning"){audioOn=true;toggleLabel();audio();lastBird=0;lastMusic=0}
+ if(id==="morning"){toggleLabel();audio();lastBird=0;lastMusic=0}
  open(id);
 };
 function tick(){
