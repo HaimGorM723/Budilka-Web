@@ -252,6 +252,7 @@ function fire(){
  if(!mode || alarmAt===null)return;
  alarmAt=null;
  silence();
+ if(soundOn && master && ctx?.state==="running")master.gain.setValueAtTime(.5,ctx.currentTime);
  show("ring");
  $("ringNote").textContent=mode==="morning"?"Рождение утра":"Просто будильник";
  lastBell=0;
