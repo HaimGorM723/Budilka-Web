@@ -203,7 +203,11 @@ function tick(){
   }
  }
 }
-document.addEventListener("visibilitychange",()=>{if(document.hidden)quiet()});
+document.addEventListener("visibilitychange",()=>{
+ if(document.hidden){quiet();return}
+ if((page==="morning"&&alarms.morning.on&&audioOn)||ringing){audio()}
+ tick();
+});
 window.addEventListener("pagehide",quiet);
 toggleLabel();paint();drawAt(0);tick();setInterval(tick,300);
 })();
