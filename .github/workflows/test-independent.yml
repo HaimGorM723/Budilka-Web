@@ -1,7 +1,7 @@
-name: Test independent alarm scenarios
+name: Validate current browser alarm flow
 on:
   push:
-    branches: [feature/independent-alarms]
+    branches: [main, feature/compact-stage-scheduling]
   pull_request:
     branches: [main]
 permissions:
@@ -14,4 +14,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: node --test tests/independent-alarms.test.cjs
+      - run: node --test tests/compact-flow.test.cjs
