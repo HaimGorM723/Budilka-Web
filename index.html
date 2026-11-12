@@ -249,8 +249,8 @@ function stageTick(){
  if(!a.on||!a.soundOn||ringing||document.hidden||!ctx||ctx.state!=="running")return;
  const left=(a.at-Date.now())/1000,now=Date.now();
  if(left<=0)return;
- if((a.snooze||left<=180)&&now-a.lastBird>=1800){bird();a.lastBird=now}
- if(left<=60&&now-a.lastMusic>=1500){melody();a.lastMusic=now}
+ if((a.snooze||left<=180)&&now-a.lastBird>=1800){master.gain.setValueAtTime(1,ctx.currentTime);bird();a.lastBird=now}
+ if(left<=60&&now-a.lastMusic>=1500){master.gain.setValueAtTime(1,ctx.currentTime);melody();a.lastMusic=now}
 }
 function ring(id){
  const a=A[id];if(!a.on)return;
@@ -290,8 +290,8 @@ function tick(){
  // Manual preview only while open and audio on, without scheduling.
  if(page==="morning"&&A.morning.preview&&!A.morning.on&&A.morning.soundOn&&!document.hidden&&ctx?.state==="running"){
   const left=900-previewSeconds,now=Date.now();
-  if(left<=180&&left>0&&now-A.morning.lastBird>=1800){bird();A.morning.lastBird=now}
-  if(left<=60&&left>0&&now-A.morning.lastMusic>=1500){melody();A.morning.lastMusic=now}
+  if(left<=180&&left>0&&now-A.morning.lastBird>=1800){master.gain.setValueAtTime(1,ctx.currentTime);bird();A.morning.lastBird=now}
+  if(left<=60&&left>0&&now-A.morning.lastMusic>=1500){master.gain.setValueAtTime(1,ctx.currentTime);melody();A.morning.lastMusic=now}
  }
 }
 document.addEventListener("visibilitychange",()=>{
