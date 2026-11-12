@@ -81,7 +81,7 @@ test("sound test has ringtone selection, volume, and a Back without snooze",asyn
  a.el.soundChoice.listeners.change({target:{value:"bright"}});
  a.el.volume.listeners.input({target:{value:"30"}});
  assert.equal(a.el.volumeLabel.textContent,"30%");
- a.el.playSound.onclick();await a.settle();
+ await a.el.playSound.onclick();
  assert.ok(a.sounds.notes>0);
  a.el.soundBack.onclick();assert.equal(a.visible("simple"),true);
 });
