@@ -69,14 +69,14 @@ test("morning: birds start T-3, melody T-1, not only at T",async()=>{
 test("morning countdown reflects actual chosen wake time, not fixed 15 min",async()=>{
  const a=harness();a.el.homeMorning.onclick();a.el.timeMorning.value="06:49";
  a.el.timeMorning.listeners.input();
- assert.match(a.el.birdsText.textContent,/Поют/);
+ assert.equal(a.el.birdsText.textContent,"−3 мин");
  await a.el.startMorning.onclick();
  a.el.homeMorning.onclick(); // confirmation, not settings: don't rely on reopening running setup
  assert.match(a.el.homeMorningTime.textContent,/06:49/);
  assert.ok(!a.el.homeMorningTime.textContent.includes("15 мин"));
 });
 test("sound test has ringtone selection, volume, and a Back without snooze",async()=>{
- const a=harness();a.el.homeSimple.onclick();a.el.soundCheck.onclick();await a.settle();
+ const a=harness();a.el.homeSimple.onclick();await a.el.soundCheck.onclick();
  assert.equal(a.visible("sound"),true);
  a.el.soundChoice.listeners.change({target:{value:"bright"}});
  a.el.volume.listeners.input({target:{value:"30"}});
