@@ -1,0 +1,17 @@
+name: Test compact alarm flow
+on:
+  push:
+    branches: [feature/compact-stage-scheduling]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/compact-flow.test.cjs
